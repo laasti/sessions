@@ -9,6 +9,8 @@
         }
     ],
     "require": {
+        "psr/http-message": "~1.0",
+        "dflydev/fig-cookies": "~1.0.0"
     },
     "require-dev": {
     },

@@ -8,21 +8,19 @@ class Session
     protected $started = false;
     protected $changed = false;
     protected $data = [];
-    protected $legacyMode = false;
     protected $handler;
-    protected $validator;
-    protected $persister;
+    protected $sessionId;
+    protected $expirationTime;
+    protected $gcProbability;
+    protected $flashdataKey;
 
-    public function __construct(\SessionHandlerInterface $handler, \Laasti\Sessions\ValidatorInterface $validator, Persisters\PersisterInterface $persister, $legacyMode = false)
+    public function __construct(\SessionHandlerInterface $handler, $sessionId, $expirationTime = null, $gcProbability = null, $flashdataKey = 'laasti:flashdata')
     {
-        //How to retrieve cookie?
         $this->handler = $handler;
-        $this->validator = $validator;
-        $this->persister = $persister;
-        $this->legacyMode = $legacyMode;
-        if ($this->legacyMode === true) {
-            $this->data = & $_SESSION;
-        }
+        $this->sessionId = $sessionId;
+        $this->expirationTime = $expirationTime ?: ini_get('session.gc_maxlifetime');
+        $this->gcProbability = $gcProbability ?: ini_get('session.gc_probability');
+        $this->flashdataKey = $flashdataKey;
     }
 
     public function add(array $data)
@@ -71,25 +69,36 @@ class Session
 
     public function hasChanged()
     {
-        $this->lazyLoad();
         return $this->changed;
+    }
+
+    public function flash($key, $value)
+    {
+        $this->lazyLoad();
+        $this->data[$this->flashdataKey.'.new'][$key] = $value;
+        $this->changed = true;
+        return $this;
+    }
+
+    public function reflash($keys = array())
+    {
+        $this->lazyLoad();
+        if (empty($keys)) {
+            $keys = array_keys($this->data[$this->flashdataKey.'.old']);
+        }
+        foreach ($keys as $key) {
+            if (isset($this->data[$this->flashdataKey.'.old'][$key])) {
+                $this->data[$this->flashdataKey.'.new'][$key] = $this->data[$this->flashdataKey.'.old'][$key];
+            }
+        }
+        $this->changed = true;
+        return $this;
     }
 
     public function isEmpty()
     {
         $this->lazyLoad();
         return count($this->data) === 0;
-    }
-
-    public function regenerate($keepData = true)
-    {
-        $oldId = $this->persister->getSessionId();
-        $this->persister->createNewSessionId();
-        if (!$keepData) {
-            $this->clear();
-            $this->destroy($oldId);
-        }
-        return $this;
     }
 
     public function hasStarted()
@@ -99,9 +108,13 @@ class Session
 
     public function start()
     {
-        //TODO call gc: http://php.net/manual/en/sessionhandlerinterface.gc.php
-        $this->handler->open($save_path, $name);
-        $this->data = $this->deserializeString($this->handler->read($this->persister->getSessionId()));
+        srand(time());
+        if ((rand() % 100) < $this->gcProbability) {
+            $this->handler->gc(time()+$this->expirationTime);
+        }
+        $this->handler->open();
+        $this->data = $this->deserializeString($this->handler->read($this->sessionId));
+        $this->swapFlashdata();
         $this->started = true;
         $this->changed = false;
         
@@ -110,7 +123,7 @@ class Session
 
     public function save($end = true)
     {
-        $this->handler->write($this->persister->getSessionId(), $this->getSerializedString());
+        $this->handler->write($this->sessionId, $this->getSerializedString());
         if ($end) {
             $this->end();
         }
@@ -126,9 +139,31 @@ class Session
 
     public function destroy()
     {
-        $this->handler->destroy($this->persister->getSessionId());
+        $this->handler->destroy($this->sessionId);
         $this->clear();
         $this->started = false;
+        return $this;
+    }
+
+    public function withSessionId($sessionId, $keepData = true, $destroyOldSession = true)
+    {
+        $oldId = $this->sessionId;
+        $new = clone $this;
+        $new->sessionId = $sessionId;
+        if (!$keepData) {
+            $new->clear();
+        }
+        if ($destroyOldSession) {
+            $this->handler->destroy($oldId);
+        }
+        return $new;
+    }
+
+    protected function swapFlashdata()
+    {
+        $this->data[$this->flashdataKey.'.old'] = $this->data[$this->flashdataKey.'.new'];
+        $this->data[$this->flashdataKey.'.new'] = array();
+        $this->changed = true;
         return $this;
     }
 

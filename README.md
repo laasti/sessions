@@ -8,7 +8,6 @@ composer require laasti/sessions
 
 ## Usage
 
-
 ## Contributing
 
 1. Fork it!

@@ -1,15 +1,18 @@
 <?php
 
-namespace Laasti\Sessions;
+namespace Laasti\Sessions\Persisters;
 
 use Dflydev\FigCookies\Cookies;
 use Dflydev\FigCookies\SetCookie;
 use Dflydev\FigCookies\SetCookies;
+use Laasti\Sessions\Session;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use SessionHandler;
 
-class SessionMiddleware
+
+class HttpMessageCookiePersister implements HttpMessagePersisterInterface
 {
     protected $config;
     
@@ -30,7 +33,6 @@ class SessionMiddleware
             'cookie_path' => ini_get('session.cookie_path'),
             'cookie_secure' => ini_get('session.cookie_secure'),
             'cookie_httponly' => ini_get('session.cookie_httponly'),
-            'attribute' => 'session',
             'hash_callback' => [$this, 'generateSessionId']
         );
         if (!isset($config['handler'])) {
@@ -38,39 +40,14 @@ class SessionMiddleware
         }
         $this->config = $config;
     }
-
-    public function __invoke(ServerRequestInterface $request, ResponseInterface $response, callable $next)
-    {
-        //Save session to request
-        $session = $this->createSession($request);
-        $request->withAttribute($this->config['attribute'], $session);
-        
-        $response = $next($request, $response);
-
-        //Send session cookie
-        $setCookies = SetCookies::fromResponse($response);
-        $setCookie = new SetCookie($this->config['cookie_name'], $session->getSessionId());
-        $setCookie = $setCookie->withExpires($this->config['cookie_lifetime'])
-                ->withPath($this->config['cookie_path'])
-                ->withDomain($this->config['cookie_domain'])
-                ->withSecure($this->config['cookie_secure'])
-                ->withHttpOnly($this->config['cookie_httponly']);
-        $response = $setCookies->with($setCookie)->renderIntoSetCookieHeader($response);
-
-        return $response;
-    }
-
-    protected function newSessionId(ServerRequestInterface $request)
-    {
-        return call_user_func_array($this->config['hash_callback'], $request);
-    }
-
-    protected function createSession(ServerRequestInterface $request)
+    
+    public function retrieve(RequestInterface $request)
     {
         $cookies = Cookies::fromRequest($request);
 
         $sessionId = $cookies->get($this->config['cookie_name']);
         $isNew = false;
+        
         if (is_null($sessionId)) {
             $sessionId = call_user_func_array($this->config['hash_callback'], $request);
             $isNew = true;
@@ -83,22 +60,36 @@ class SessionMiddleware
         }
         $meta = $session->get($this->config['metadata'], []);
         $now = time();
-        $meta += [
-            'creation_time' => $now,
-            'ip_address' => $request->getServerParams()['REMOTE_ADDR'],
-            'user_agent' => $request->getServerParams()['HTTP_USER_AGENT'],
-        ];
-        
-        $meta['last_activity_time'] = $now;
-
-        if ($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now) {
+        if (($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now)) {
             $session = $session->withSessionId($this->newSessionId($request), true, true);
-        }
-        $session->set($this->config['metadata'], $meta);
+            $meta['last_regenerated_time'] = $now;
+        }        
+        $session->set($this->config['metadata'], $this->getUpdatedMetadata($meta, $request));
+        
         return $session;
+        
+    }
+    
+    public function persist(Session $session, ResponseInterface $response)
+    {
+        $setCookies = SetCookies::fromResponse($response);
+        $setCookie = (new SetCookie($this->config['cookie_name'], $session->getSessionId()))
+                ->withExpires($this->config['cookie_lifetime'])
+                ->withPath($this->config['cookie_path'])
+                ->withDomain($this->config['cookie_domain'])
+                ->withSecure($this->config['cookie_secure'])
+                ->withHttpOnly($this->config['cookie_httponly']);
+        
+        return $setCookies->with($setCookie)->renderIntoSetCookieHeader($response);        
+    }
+    
+    
+    protected function newSessionId(RequestInterface $request)
+    {
+        return call_user_func_array($this->config['hash_callback'], $request);
     }
 
-    protected function validateSession(\Session $session, ServerRequestInterface $request, $isNew)
+    protected function validateSession(\Session $session, RequestInterface $request, $isNew)
     {
         $meta = $session->get($this->config['metadata'], []);
         $time = time();
@@ -125,8 +116,24 @@ class SessionMiddleware
 
         return true;
     }
+    
+    protected function getUpdatedMetadata($meta, RequestInterface $request)
+    {
+        $now = time();
+        $meta += [
+            'creation_time' => $now,
+            'ip_address' => $request->getServerParams()['REMOTE_ADDR'],
+            'user_agent' => $request->getServerParams()['HTTP_USER_AGENT'],
+        ];
+        
+        $meta['last_activity_time'] = $now;
 
-    //Todo move to session
+        if ($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now) {
+            $session = $session->withSessionId($this->newSessionId($request), true, true);
+        }
+        return $meta;
+    }
+
     public function generateSessionId(ServerRequestInterface $request)
     {
         $sessid = '';

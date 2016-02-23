@@ -1,0 +1,37 @@
+Notes about what to test
+
+Workflows
+
+see https://gist.github.com/mindplay-dk/623bdd50c1b4c0553cd3
+
+Session initialized
+but not used should not be persisted. ie. empty session
+not saved
+not persisted
+
+Session initialized
+Data added
+Saved
+Persisted
+
+Existing session
+Not modified
+not saved
+
+Existing session 
+Data modified
+saved
+
+Existing session
+Expired (inactivity)
+Deleted
+Return new instance with new id without data
+saved and persisted if data added to new instance, else optionally, destroy cookie
+
+Existing session 
+Destroyed
+Return new instance with new id without data
+saved and persisted if data added to new instance, else optionally, destroy cookie
+
+
+

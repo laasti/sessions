@@ -9,6 +9,7 @@ class FileHandler implements SessionHandlerInterface
 
     protected $path;
 
+    //TODO file locks
     public function __construct($path)
     {
         $this->path = $path;

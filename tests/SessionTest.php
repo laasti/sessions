@@ -60,6 +60,65 @@ class SessionTest extends \PHPUnit_Framework_TestCase
         $this->assertTrue($session->has('flashed'));
         $this->assertTrue($session->get('flashed'));
         $this->assertTrue($session->get('flashed2') === 123);
+        
+        $session->reflash(['flashed']);
+        $this->assertTrue($session->all(true)['laasti:flashdata.new']['flashed']);
+        $this->assertTrue(!isset($session->all(true)['laasti:flashdata.new']['flashed2']));
+        $session->reflash();
+        $this->assertTrue($session->all(true)['laasti:flashdata.new']['flashed2'] === 123);
+    }
+    
+    public function testHandlerSessionUnused()
+    {
+        $handler = $this->getMock('Laasti\Sessions\Handlers\NullHandler');
+        $handler->expects($this->never())->method($this->anything());
+        $session = new \Laasti\Sessions\Session($handler, uniqid('laasti.sessions', true));
+    }
+    
+    public function testHandlerSessionCreated()
+    {
+        $id = uniqid('laasti.sessions', true);
+        $handler = $this->getMock('Laasti\Sessions\Handlers\NullHandler');
+        $handler->expects($this->at(0))->method('open');
+        $handler->expects($this->at(1))->method('read')->with($id);
+        $handler->expects($this->at(2))->method('write')->with($id);
+        $handler->expects($this->at(3))->method('close');
+        $session = new \Laasti\Sessions\Session($handler, $id);
+        $session->set('test', 123);
+        $session->save();
+    }
+    
+    public function testHandlerSessionChangedId()
+    {
+        $id = uniqid('laasti.sessions', true);
+        $newId = uniqid('laasti.sessions', true);
+        $handler = $this->getMock('Laasti\Sessions\Handlers\NullHandler');
+        $handler->expects($this->at(0))->method('open');
+        $handler->expects($this->at(1))->method('read')->with($id);
+        $handler->expects($this->at(2))->method('write')->with($newId);
+        $handler->expects($this->at(3))->method('close');
+        $session = new \Laasti\Sessions\Session($handler, $id);
+        $session->set('test', 123);
+        $session = $session->withSessionId($newId, true, false);
+        $this->assertSame($session->get('test'), 123);
+        $session->save();
+    }
+    
+    public function testHandlerSessionChangedIdOldDestroyed()
+    {
+        $id = uniqid('laasti.sessions', true);
+        $newId = uniqid('laasti.sessions', true);
+        $handler = $this->getMock('Laasti\Sessions\Handlers\NullHandler');
+        $handler->expects($this->at(0))->method('open');
+        $handler->expects($this->at(1))->method('read')->with($id);
+        $handler->expects($this->at(2))->method('destroy')->with($id);
+        $handler->expects($this->at(3))->method('write')->with($newId);
+        $handler->expects($this->at(4))->method('close');
+        $session = new \Laasti\Sessions\Session($handler, $id);
+        $session->set('test', 123);
+        $session = $session->withSessionId($newId, false, true);
+        $this->assertSame($session->get('test', 1), 1);
+        $session->save();
     }
 
 }

@@ -2,10 +2,12 @@
 
 namespace Laasti\Sessions\Persisters;
 
+use Laasti\Sessions\Session;
+
 interface PersisterInterface
 {
     /**
-     * @return \Laasti\Sessions\Session
+     * @return Session
      */
     public function retrieve();
     

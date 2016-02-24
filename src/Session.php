@@ -5,6 +5,7 @@ namespace Laasti\Sessions;
 class Session
 {
 
+    protected $new = true;
     protected $started = false;
     protected $destroyed = false;
     protected $changed = false;
@@ -171,6 +172,7 @@ class Session
         if (isset($this->data[$this->flashdataKey.'.old'][$key])) {
             unset($this->data[$this->flashdataKey.'.old'][$key]);
         }
+        $this->changed = true;
         return $this;
     }
 
@@ -203,6 +205,24 @@ class Session
         $this->lazyLoad();
         return count($this->data) === 0;
     }
+    /**
+     * Is the session new? (Never saved before)
+     * @return bool
+     */
+    public function isNew()
+    {
+        $this->lazyLoad();
+        return $this->new;
+    }
+    
+    /**
+     * Has the session been destroyed?
+     * @return bool
+     */
+    public function wasDestroyed()
+    {
+        return $this->destroyed;
+    }
 
     /**
      * Has the session started?
@@ -228,9 +248,10 @@ class Session
         }
         $this->handler->open();
         $this->data = $this->deserializeString($this->handler->read($this->sessionId));
-        $this->swapFlashdata();
+        $this->new = empty($this->data);
         $this->started = true;
         $this->changed = false;
+        $this->swapFlashdata();
         
         return $this;
     }
@@ -242,11 +263,17 @@ class Session
      */
     public function save($end = true)
     {
-        if ($this->hasStarted()) {
-            $this->handler->write($this->sessionId, $this->getSerializedString());
+        if ($this->destroyed) {
+            throw new Exceptions\DestroyedSessionException('The session was destroyed. It can\'t be used anymore.');
         }
-        if ($end) {
-            $this->end();
+        if ($this->hasStarted()) {
+            if ($this->hasChanged()) {
+                $this->handler->write($this->sessionId, $this->getSerializedString());
+            }
+            $this->new = false;
+            if ($end) {
+                $this->end();
+            }
         }
         return $this;
     }
@@ -257,7 +284,22 @@ class Session
      */
     public function end()
     {
-        $this->handler->close();
+        if ($this->destroyed) {
+            throw new Exceptions\DestroyedSessionException('The session was destroyed. It can\'t be used anymore.');
+        }
+        if ($this->hasStarted()) {
+            $this->handler->close();
+            $this->started = false;
+        }
+        return $this;
+    }
+    
+    /**
+     * Revert any modification made to the session
+     * @return \Laasti\Sessions\Session
+     */
+    public function revert()
+    {
         $this->started = false;
         return $this;
     }
@@ -268,18 +310,31 @@ class Session
      */
     public function destroy()
     {
+        if ($this->destroyed) {
+            throw new Exceptions\DestroyedSessionException('The session was already destroyed. It can\'t be used anymore.');
+        }
         $this->handler->destroy($this->sessionId);
+        $this->handler->close();
         $this->clear();
         $this->started = false;
         $this->destroyed = true;
         return $this;
     }
+    
+    public function getSessionId()
+    {
+        return $this->sessionId;
+    }
 
     public function withSessionId($sessionId, $keepData = true, $destroyOldSession = true)
     {
+        if ($this->destroyed) {
+            throw new Exceptions\DestroyedSessionException('The session was destroyed. It can\'t be cloned anymore.');
+        }
         $oldId = $this->sessionId;
         $new = clone $this;
         $new->sessionId = $sessionId;
+        $new->new = true;
         if (!$keepData) {
             $new->clear();
         }
@@ -293,11 +348,11 @@ class Session
     {
         if (isset($this->data[$this->flashdataKey.'.new'])) {
             $this->data[$this->flashdataKey.'.old'] = $this->data[$this->flashdataKey.'.new'];
+            $this->changed = true;
         } else {
             $this->data[$this->flashdataKey.'.old'] = [];
         }
         $this->data[$this->flashdataKey.'.new'] = [];
-        $this->changed = true;
         return $this;
     }
 

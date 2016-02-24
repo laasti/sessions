@@ -13,7 +13,8 @@
         "dflydev/fig-cookies": "~1.0.0"
     },
     "require-dev": {
-        "psr/log": "1.0.0"
+        "psr/log": "1.0.0",
+        "zendframework/zend-diactoros": "1.3.3"
     },
     "suggest": {
     },

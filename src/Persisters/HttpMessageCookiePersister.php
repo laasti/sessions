@@ -5,6 +5,7 @@ namespace Laasti\Sessions\Persisters;
 use Dflydev\FigCookies\Cookies;
 use Dflydev\FigCookies\SetCookie;
 use Dflydev\FigCookies\SetCookies;
+use InvalidArgumentException;
 use Laasti\Sessions\Session;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -14,6 +15,9 @@ use SessionHandler;
 
 class HttpMessageCookiePersister implements HttpMessagePersisterInterface
 {
+    const DEFAULT_COOKIE_NAME = 'laasti:session';
+    const DEFAULT_FLASHDATA_KEY = 'laasti:flashdata';
+    const DEFAULT_METADATA_KEY = 'laasti:metadata';
     protected $config;
     
     public function __construct(array $config = array())
@@ -24,10 +28,10 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
             'expire_time' => 60*60*20,
             'expire_anyway_time' => 60*60*60*24*7,
             'regenerate_time' => 300,
-            'flashdata' => 'laasti:flashdata',
-            'metadata' => 'laasti:metadata',
+            'flashdata' => self::DEFAULT_FLASHDATA_KEY,
+            'metadata' => self::DEFAULT_METADATA_KEY,
             'gc_probability' => ini_get('session.gc_probability'),
-            'cookie_name' => 'laasti:session',
+            'cookie_name' => self::DEFAULT_COOKIE_NAME,
             'cookie_lifetime' => ini_get('session.cookie_lifetime'),
             'cookie_domain' => ini_get('session.cookie_domain'),
             'cookie_path' => ini_get('session.cookie_path'),
@@ -41,8 +45,11 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         $this->config = $config;
     }
     
-    public function retrieve(RequestInterface $request)
+    public function retrieve(RequestInterface $request = null)
     {
+        if (is_null($request)) {
+            throw new InvalidArgumentException('You must pass an instance of RequestInterface.');
+        }
         $cookies = Cookies::fromRequest($request);
 
         $sessionId = $cookies->get($this->config['cookie_name']);
@@ -70,8 +77,11 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         
     }
     
-    public function persist(Session $session, ResponseInterface $response)
+    public function persist(Session $session, ResponseInterface $response = null)
     {
+        if (is_null($response)) {
+            throw new InvalidArgumentException('You must pass an instance of ResponseInterface.');
+        }
         $setCookies = SetCookies::fromResponse($response);
         $setCookie = (new SetCookie($this->config['cookie_name'], $session->getSessionId()))
                 ->withExpires($this->config['cookie_lifetime'])
@@ -89,7 +99,7 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         return call_user_func_array($this->config['hash_callback'], $request);
     }
 
-    protected function validateSession(\Session $session, RequestInterface $request, $isNew)
+    protected function validateSession(Session $session, RequestInterface $request, $isNew)
     {
         $meta = $session->get($this->config['metadata'], []);
         $time = time();

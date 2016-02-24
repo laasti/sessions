@@ -13,13 +13,13 @@ interface HttpMessagePersisterInterface extends PersisterInterface
      * @param RequestInterface $request
      * @return Session
      */
-    public function retrieve(RequestInterface $request);
+    public function retrieve(RequestInterface $request = null);
     
     /**
      * 
      * @param \Laasti\Sessions\Persisters\Session $session
-     * @param \Psr\Http\Message\ResponseInterface $response
-     * @return \Psr\Http\Message\ResponseInterface $response
+     * @param ResponseInterface $response
+     * @return ResponseInterface $response
      */
-    public function persist(Session $session, ResponseInterface $response);
+    public function persist(Session $session, ResponseInterface $response = null);
 }

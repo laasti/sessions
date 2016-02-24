@@ -4,8 +4,14 @@ namespace Laasti\Sessions\Handlers;
 
 use SessionHandlerInterface;
 
-class NullHandler implements SessionHandlerInterface
+class FakeHandler implements SessionHandlerInterface
 {
+    protected $data;
+    
+    public function __construct($data = [])
+    {
+        $this->data = $data;
+    }
     public function open($savePath = null, $sessionName = null)
     {
         return true;
@@ -18,7 +24,7 @@ class NullHandler implements SessionHandlerInterface
 
     public function read($id)
     {
-        return '';
+        return serialize($this->data);
     }
 
     public function write($id, $data)

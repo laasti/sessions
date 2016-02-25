@@ -10,7 +10,7 @@ composer require laasti/sessions
 
 ## Usage
 
-The package provides by default stores sessions to filesystem and persists sessions with cookies.
+The package by default stores sessions to filesystem and persists sessions with cookies.
 
 A middleware is responsible to insert the session in the request and to persist it in the response.
 
@@ -21,6 +21,8 @@ The middleware uses a HttpPersisterInterface which does all the background work 
 For that reason, it is recommended that only middlewares should mess with the session id and each middleware is responsible for the persistence of its new session.
 
 To ease the process, you can easily reuse the persister across multiple middlewares in case you need to regenerate the session.
+
+The default Cookie persister does not overwrite the cookie if it already exists in the response.
 
 ## Contributing
 

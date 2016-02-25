@@ -316,7 +316,9 @@ class Session
         $this->handler->destroy($this->sessionId);
         $this->handler->close();
         $this->clear();
+        $this->new = false;
         $this->started = false;
+        $this->changed = false;
         $this->destroyed = true;
         return $this;
     }
@@ -335,6 +337,7 @@ class Session
         $new = clone $this;
         $new->sessionId = $sessionId;
         $new->new = true;
+        $new->changed = true;
         if (!$keepData) {
             $new->clear();
         }

@@ -58,37 +58,54 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         if (is_null($sessionId)) {
             $sessionId = call_user_func_array($this->config['hash_callback'], $request);
             $isNew = true;
+        } else if ($sessionId instanceof \Dflydev\FigCookies\Cookie) {
+            $sessionId = $sessionId->getValue();
         }
         $session = new Session($this->config['handler'], $sessionId, $this->config['expire_time'], $this->config['gc_probability'], $this->config['flashdata']);
 
-        if (!$this->validateSession($session, $request, $isNew)) {
+        if ($this->validateSession($session, $request, $isNew)) {
+            $now = time();
+            $meta = $session->get($this->config['metadata'], []);
+            if (($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now)) {
+                $session = $session->withSessionId($this->newSessionId($request), true, true);
+                $meta['last_regenerated_time'] = $now;
+            }        
+        } else {
             //The session was tempered with or has expired, change sessionId and create anew
             $session = $session->withSessionId($this->newSessionId($request), false, true);
+            $meta = [];
         }
-        $meta = $session->get($this->config['metadata'], []);
-        $now = time();
-        if (($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now)) {
-            $session = $session->withSessionId($this->newSessionId($request), true, true);
-            $meta['last_regenerated_time'] = $now;
-        }        
         $session->set($this->config['metadata'], $this->getUpdatedMetadata($meta, $request));
         
         return $session;
         
     }
     
-    public function persist(Session $session, ResponseInterface $response = null)
+    public function persist(Session $session, ResponseInterface $response = null, $overwriteExistingCookie = false)
     {
         if (is_null($response)) {
             throw new InvalidArgumentException('You must pass an instance of ResponseInterface.');
         }
         $setCookies = SetCookies::fromResponse($response);
-        $setCookie = (new SetCookie($this->config['cookie_name'], $session->getSessionId()))
-                ->withExpires($this->config['cookie_lifetime'])
+        
+        //Cookie already set in response by a preceding middleware
+        if (!$overwriteExistingCookie && $setCookies->has($this->config['cookie_name'])) {
+            return $response;
+        }
+        
+        $setCookie = (new SetCookie($this->config['cookie_name']))
                 ->withPath($this->config['cookie_path'])
                 ->withDomain($this->config['cookie_domain'])
                 ->withSecure($this->config['cookie_secure'])
                 ->withHttpOnly($this->config['cookie_httponly']);
+        
+        if ($session->wasDestroyed()) {
+            $setCookie = $setCookie->withValue('')
+                ->withExpires(1);
+        } else {
+            $setCookie = $setCookie->withValue($session->getSessionId())
+                ->withExpires($this->config['cookie_lifetime'] === 0 ? 0 : time()+$this->config['cookie_lifetime']);
+        }
         
         return $setCookies->with($setCookie)->renderIntoSetCookieHeader($response);        
     }
@@ -96,7 +113,7 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
     
     protected function newSessionId(RequestInterface $request)
     {
-        return call_user_func_array($this->config['hash_callback'], $request);
+        return call_user_func_array($this->config['hash_callback'], [$request]);
     }
 
     protected function validateSession(Session $session, RequestInterface $request, $isNew)
@@ -115,6 +132,9 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
             return false;
         }
         //check ip
+        if (($this->config['match_ip'] || $this->config['match_useragent']) && !$request instanceof ServerRequestInterface) {
+            throw new \RuntimeException('When enabling math_ip or match_useragent options, you need to use a ServerRequestInterface.');
+        }
         //TODO better ip address
         if ($this->config['match_ip'] && $meta['ip_address'] !== $request->getServerParams()['REMOTE_ADDR']) {
             return false;
@@ -130,28 +150,33 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
     protected function getUpdatedMetadata($meta, RequestInterface $request)
     {
         $now = time();
+        $params = ['REMOTE_ADDR' => '', 'HTTP_USER_AGENT' => ''];
+        if ($request instanceof ServerRequestInterface) {
+            $params = array_merge($params, $request->getServerParams());
+        }
         $meta += [
             'creation_time' => $now,
-            'ip_address' => $request->getServerParams()['REMOTE_ADDR'],
-            'user_agent' => $request->getServerParams()['HTTP_USER_AGENT'],
+            'ip_address' => $params['REMOTE_ADDR'],
+            'user_agent' => $params['HTTP_USER_AGENT'],
         ];
         
         $meta['last_activity_time'] = $now;
 
-        if ($meta['last_regenerated_time']+$this->config['regenerate_time'] < $now) {
-            $session = $session->withSessionId($this->newSessionId($request), true, true);
-        }
         return $meta;
     }
 
-    public function generateSessionId(ServerRequestInterface $request)
+    public function generateSessionId(RequestInterface $request)
     {
         $sessid = '';
         while (strlen($sessid) < 32) {
             $sessid .= mt_rand(0, mt_getrandmax());
         }
-        $server = $request->getServerParams();
-        $sessid = md5(uniqid($sessid, TRUE).time().$server['REMOTE_ADDR']);
+        $keyPayload = uniqid($sessid, TRUE).time();
+        if ($request instanceof ServerRequestInterface) {
+            $server = $request->getServerParams();
+            $keyPayload .= isset($server['REMOTE_ADDR']) ? $server['REMOTE_ADDR'] : '';
+        }
+        $sessid = sha1($keyPayload);
         return $sessid;
     }
 }

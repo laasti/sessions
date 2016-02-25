@@ -44,4 +44,12 @@ class HttpMessageCookiePersisterTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($session->getSessionId(), $this->id);
     }
 
+    public function testCookieRetrievalNoDataRegenerateId()
+    {
+        $request = $this->getRequestWithCookie();
+        $persister = new HttpMessageCookiePersister(['handler' => new FakeHandler([])]);
+        $session = $persister->retrieve($request);
+        $this->assertNotEquals($session->getSessionId(), $this->id);
+    }
+
 }

@@ -30,7 +30,7 @@ class FileHandler implements SessionHandlerInterface
         }
     }
 
-    public function open($savePath, $sessionName)
+    public function open($savePath = null, $sessionName = null)
     {
         return true;
     }

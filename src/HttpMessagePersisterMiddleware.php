@@ -20,15 +20,16 @@ class HttpMessagePersisterMiddleware
     {
         //Save session to request
         $session = $this->persister->retrieve($request);
-        $request->withAttribute($this->attribute, $session);
+        $request = $request->withAttribute($this->attribute, $session);
         
         $response = $next($request, $response);
         
         //Autosave session
+        $wasNew = $session->isNew();
         if ($session->hasChanged()) {
             $session->save();
         }
-        if (($session->hasChanged() && $session->isNew()) || $session->wasDestroyed()) {
+        if (($session->hasChanged() && $wasNew) || $session->wasDestroyed()) {
             //Add session cookie
             return $this->persister->persist($session, $response);
         }

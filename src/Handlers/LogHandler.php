@@ -12,7 +12,7 @@ class LogHandler implements SessionHandlerInterface
     {
         $this->logger = $logger;
     }
-    public function open($savePath, $sessionName)
+    public function open($savePath = null, $sessionName = null)
     {
         $this->logger->debug('Opened session: '.$sessionName);
         return true;

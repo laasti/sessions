@@ -246,7 +246,7 @@ class Session
         if ((rand() % 100) < $this->gcProbability) {
             $this->handler->gc(time()+$this->expirationTime);
         }
-        $this->handler->open();
+        $this->handler->open(null, null);
         $this->data = $this->deserializeString($this->handler->read($this->sessionId));
         $this->new = empty($this->data);
         $this->started = true;

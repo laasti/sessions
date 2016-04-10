@@ -51,12 +51,11 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
             throw new InvalidArgumentException('You must pass an instance of RequestInterface.');
         }
         $cookies = Cookies::fromRequest($request);
-
         $sessionId = $cookies->get($this->config['cookie_name']);
         $isNew = false;
         
         if (is_null($sessionId)) {
-            $sessionId = call_user_func_array($this->config['hash_callback'], $request);
+            $sessionId = call_user_func_array($this->config['hash_callback'], [$request]);
             $isNew = true;
         } else if ($sessionId instanceof \Dflydev\FigCookies\Cookie) {
             $sessionId = $sessionId->getValue();
@@ -87,13 +86,12 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
             throw new InvalidArgumentException('You must pass an instance of ResponseInterface.');
         }
         $setCookies = SetCookies::fromResponse($response);
-        
         //Cookie already set in response by a preceding middleware
         if (!$overwriteExistingCookie && $setCookies->has($this->config['cookie_name'])) {
             return $response;
         }
         
-        $setCookie = (new SetCookie($this->config['cookie_name']))
+        $setCookie = SetCookie::create($this->config['cookie_name'])
                 ->withPath($this->config['cookie_path'])
                 ->withDomain($this->config['cookie_domain'])
                 ->withSecure($this->config['cookie_secure'])
@@ -104,7 +102,7 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
                 ->withExpires(1);
         } else {
             $setCookie = $setCookie->withValue($session->getSessionId())
-                ->withExpires($this->config['cookie_lifetime'] === 0 ? 0 : time()+$this->config['cookie_lifetime']);
+                ->withExpires($this->config['cookie_lifetime'] == 0 ? 0 : time()+$this->config['cookie_lifetime']);
         }
         
         return $setCookies->with($setCookie)->renderIntoSetCookieHeader($response);        
@@ -158,6 +156,7 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
             'creation_time' => $now,
             'ip_address' => $params['REMOTE_ADDR'],
             'user_agent' => $params['HTTP_USER_AGENT'],
+            'last_regenerated_time' => $now
         ];
         
         $meta['last_activity_time'] = $now;

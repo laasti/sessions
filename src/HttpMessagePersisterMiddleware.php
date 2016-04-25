@@ -27,7 +27,7 @@ class HttpMessagePersisterMiddleware
         //Autosave session
         $wasNew = $session->isNew();
         if ($session->hasChanged()) {
-            $session->save();
+            $session->save(false);
         }
         if (($session->hasChanged() && $wasNew) || $session->wasDestroyed()) {
             //Add session cookie

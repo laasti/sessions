@@ -122,6 +122,9 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         if (!$isNew && (!isset($meta['last_activity_time']) || !isset($meta['ip_address']) || !isset($meta['user_agent']) || !isset($meta['creation_time']) || !isset($meta['last_regenerated_time']))) {
             return false;
         }
+        if (!isset($meta['last_activity_time'])) {
+            return false;
+        }
         //check last activity
         if ($meta['last_activity_time']+$this->config['expire_time'] < $time) {
             return false;

@@ -25,9 +25,9 @@ class HttpMessageCookiePersister implements HttpMessagePersisterInterface
         $config += array(
             'match_ip' => false,
             'match_useragent' => false,
-            'expire_time' => 60*60*20,
-            'expire_anyway_time' => 60*60*60*24*7,
-            'regenerate_time' => 300,
+            'expire_time' => 60*60*3, //3 hours
+            'expire_anyway_time' => 60*60*24*7, //1 week
+            'regenerate_time' => 60*10, //10 minutes
             'flashdata' => self::DEFAULT_FLASHDATA_KEY,
             'metadata' => self::DEFAULT_METADATA_KEY,
             'gc_probability' => ini_get('session.gc_probability'),

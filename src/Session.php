@@ -372,7 +372,7 @@ class Session
             return [];
         }
         
-        $data = @unserialize(stripslashes($string));
+        $data = @unserialize($string);
 
         if (is_array($data)) {
             foreach ($data as $key => $val) {
